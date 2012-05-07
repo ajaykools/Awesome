@@ -7,7 +7,6 @@ require("beautiful")
 -- Notification library
 require("naughty")
 require('vicious')
-require("volume")
 
 -- Load Debian menu entries
 require("debian.menu")
@@ -67,7 +66,7 @@ myawesomemenu = {
 mymainmenu = awful.menu({ items = { { "awesome", myawesomemenu, beautiful.awesome_icon },
                                     { "Debian", debian.menu.Debian_menu.Debian },
 				    --  { "open terminal", terminal }
-				    {"Log out", '/home/ajay/.config/awesome/shutdown_dialog.sh'}
+				    {"Log out", '/home/ajay/projects/awesome/shutdown_dialog.sh'}
 				 }
 		       })
 
@@ -84,28 +83,61 @@ mysystray = widget({ type = "systray" })
 
 -- Volume
 volumewidget = widget({ type = "textbox" })
---voliconwidget = widget({ type = "imagebox" })
---voliconwidget.image = image("/usr/share/xfce4-mixer/icons/hicolor/16x16/status/xfce4-mixer-volume-high.png")
 vicious.register(volumewidget, vicious.widgets.volume, " $1%", 2, "Master")
-
 volumewidget:buttons(awful.util.table.join(
 			awful.button({ }, 1, function ()  
 						awful.util.spawn_with_shell("pavucontrol") 
 					     end)
 		  ))
+volume_widget = widget({ type = "textbox", name = "tb_volume", align = "right" })
 
--- Battery widget
-batwidget = widget({type="textbox", name="Battery", align="right"})
-vicious.register(batwidget, vicious.widgets.bat, "$2%", 180, "BAT0")
+function update_volume(widget)
+   local fd = io.popen("amixer sget Master")
+   local status = fd:read("*all")
+   fd:close()
+   
+   local volume = tonumber(string.match(status, "(%d?%d?%d)%%")) / 100
+   -- volume = string.format("% 3d", volume)
+   
+   status = string.match(status, "%[(o[^%]]*)%]")
+   
+   -- starting colour
+   local sr, sg, sb = 0x3F, 0x3F, 0x3F
+   -- ending colour
+   local er, eg, eb = 0xDC, 0xDC, 0xCC
+   
+   local ir = volume * (er - sr) + sr
+   local ig = volume * (eg - sg) + sg
+   local ib = volume * (eb - sb) + sb
+   interpol_colour = string.format("%.2x%.2x%.2x", ir, ig, ib)
+   if string.find(status, "on", 1, true) then
+      volume = " <span background='#" .. interpol_colour .. "'>   </span>"
+   else
+      volume = " <span color='red' background='#" .. interpol_colour .. "'> M </span>"
+   end
+   widget.text = volume
+end
 
-bboxwidget = widget({ type = "textbox" })
+update_volume(volume_widget)
+awful.hooks.timer.register(1, function () update_volume(volume_widget) end)
+
+-- Battery 
+-- batwidget = widget({type="textbox", name="Battery", align="right"})
+-- vicious.register(batwidget, vicious.widgets.bat, "$2%", 180, "BAT0")
+
+bboxwidget = widget({ type = "textbox", align="right" })
 vicious.register(bboxwidget, vicious.widgets.bat, 
 		 function (widget, args)
-		    if args[1] == "-" then return string.format("%s hours rem.",args[3])
-		    else return string.format("Charging")
+		    if args[1] == "-" then return string.format("%s hours rem. %s%s",args[3],args[2],"%")
+		    elseif args[2] == "100" then return  "Charged"
+		    else return string.format("%s charged, %s to cmpltly chrg",args[2], args[3])
 		    end
 		 end
 		 ,180,"BAT0")
+
+-- bboxwid = widget({ type = "textbox" })
+-- vicious.register(bboxwid, vicious.widgets.bat, "$1", 180, "BAT0")
+
 
 -- Create a wibox for each screen and add it
 mywibox = {}
@@ -180,8 +212,8 @@ for s = 1, screen.count() do
       s == 1 and mysystray or nil,
       volumewidget,
       volume_widget,
-      batwidget,
---      bboxwidget,
+--      batwidget,
+      bboxwidget,
       mytasklist[s],
       layout = awful.widget.layout.horizontal.rightleft
    }
@@ -408,7 +440,7 @@ end
 run_once("chromium-browser",nil,nil)
 run_once("xchat",nil,nil)
 run_once("wicd-client",nil,"/usr/bin/python -O /usr/share/wicd/gtk/wicd-client.py")
-run_once("/home/ajay/.config/awesome/xmodmap.sh")
+run_once("/home/ajay/projects/awesome/xmodmap.sh")
 run_once("emacs --daemon")
 run_once("guake")
 run_once("xscreensaver -no-splash &")
