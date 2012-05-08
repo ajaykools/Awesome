@@ -122,22 +122,47 @@ update_volume(volume_widget)
 awful.hooks.timer.register(1, function () update_volume(volume_widget) end)
 
 -- Battery 
--- batwidget = widget({type="textbox", name="Battery", align="right"})
--- vicious.register(batwidget, vicious.widgets.bat, "$2%", 180, "BAT0")
-
-bboxwidget = widget({ type = "textbox", align="right" })
-vicious.register(bboxwidget, vicious.widgets.bat, 
-		 function (widget, args)
-		    if args[1] == "-" then return string.format("%s hours rem. %s%s",args[3],args[2],"%")
-		    elseif args[2] == "100" then return  "Charged"
-		    else return string.format("%s charged, %s to cmpltly chrg",args[2], args[3])
-		    end
-		 end
-		 ,180,"BAT0")
-
--- bboxwid = widget({ type = "textbox" })
--- vicious.register(bboxwid, vicious.widgets.bat, "$1", 180, "BAT0")
-
+batterywidget = widget({type = "textbox", name = "batterywidget", align = "right" })
+function batteryInfo(adapter)
+   spacer = " "
+   local fcur = io.open("/sys/class/power_supply/"..adapter.."/charge_now")    
+   local fcap = io.open("/sys/class/power_supply/"..adapter.."/charge_full")
+   local fsta = io.open("/sys/class/power_supply/"..adapter.."/status")
+   local cur = fcur:read()
+   local cap = fcap:read()
+   local sta = fsta:read()
+   local battery = math.floor(cur * 100 / cap)
+   if sta:match("Charging") then
+      dir = "^"
+      battery = "<span color='#49fa03'>A/C ("..battery..")</span>" -- Green color
+   elseif sta:match("Discharging") then
+      dir = "v"
+      if tonumber(battery) > 25 and tonumber(battery) < 75 then
+	 battery = "<span color='#eafa03'>" .. battery .. "</span>"  -- yellow
+      elseif tonumber(battery) < 25 then
+	 if tonumber(battery) < 10 then
+	    naughty.notify({ title      = "Battery Warning",
+			     text       = "Battery low!"..spacer..battery.."%"..spacer.."left!",
+			     timeout    = 5,
+			     position   = "top_right",
+			     fg         = beautiful.fg_focus,
+			     bg         = beautiful.bg_focus
+			  })
+	 end
+	 battery = "<span color='#fd0101'>" .. battery .. "</span>" -- Red
+      else
+	 battery = "<span color='#49fa03'>" .. battery .. "</span>" -- Green
+      end
+   else
+      dir = "="
+      battery = "A/C"
+   end
+   batterywidget.text = spacer..dir..battery..spacer
+   fcur:close()
+   fcap:close()
+   fsta:close()
+end
+awful.hooks.timer.register(20, function()  batteryInfo("BAT1") end)
 
 -- Create a wibox for each screen and add it
 mywibox = {}
@@ -210,10 +235,9 @@ for s = 1, screen.count() do
       mylayoutbox[s],
       mytextclock,
       s == 1 and mysystray or nil,
+      batterywidget,
       volumewidget,
       volume_widget,
---      batwidget,
-      bboxwidget,
       mytasklist[s],
       layout = awful.widget.layout.horizontal.rightleft
    }
@@ -275,22 +299,19 @@ globalkeys = awful.util.table.join(
    awful.key({ modkey, "Shift"   }, "space", function () awful.layout.inc(layouts, -1) end),
 
    -- Application switcher
-   awful.key({ modkey,           }, "Escape", function ()
-						 --If you want to always position the menu on the same place set coordinates
-						 awful.menu.menu_keys.down = { "Down", "Alt_L" }
-						 local cmenu = awful.menu.clients({width=245}, { keygrabber=true, coords={x=525, y=330} })
-					      end),
+   awful.key({ "Mod1" }, "Tab", function ()
+				   --If you want to always position the menu on the same place set coordinates
+				   awful.menu.menu_keys.down = { "Down", "Alt_L" }
+				   local cmenu = awful.menu.clients({width=245}, { keygrabber=true, coords={x=525, y=330} })
+				end),
    
    -- Lock screen
    awful.key({ }, "#150", function () awful.util.spawn("xscreensaver-command -lock") end),
 
    -- Volume Controls
-   awful.key({ }, "XF86AudioRaiseVolume", function ()
-					     awful.util.spawn("amixer set Master 9%+") end),
-   awful.key({ }, "XF86AudioLowerVolume", function ()
-					     awful.util.spawn("amixer set Master 9%-") end),
-   awful.key({ }, "XF86AudioMute", function ()
-				      awful.util.spawn("amixer sset Master toggle") end),
+   awful.key({ }, "XF86AudioRaiseVolume", function () awful.util.spawn("amixer set Master 9%+") end),
+   awful.key({ }, "XF86AudioLowerVolume", function () awful.util.spawn("amixer set Master 9%-") end),
+   awful.key({ }, "XF86AudioMute", function () awful.util.spawn("amixer sset Master toggle") end),
    
    -- Prompt
    awful.key({ modkey },            "r",     function () mypromptbox[mouse.screen]:run() end),
